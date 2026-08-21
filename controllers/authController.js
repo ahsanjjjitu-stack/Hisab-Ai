@@ -8,7 +8,7 @@ const SibApiV3Sdk = require("@getbrevo/brevo");
 // brevo api config 
 
 const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-let apiKey = apiInstance.authentications["apikey"];
+let apiKey = apiInstance.authentications['apiKey'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 
 
@@ -60,7 +60,7 @@ exports.sendOtp = async (req, res) => {
     sendSmtpEmail.htmlContent = `
       <div style="font-family: Arial, sans-serif; padding: 20px;">
         <h2>আপনার অ্যাকাউন্ট ভেরিফিকেশন কোড</h2>
-        <h1 style="color: #0F52BA; letter-spacing: 2px;">${generatedOtp}</h1>
+        <h1 style="color: #0F52BA; letter-spacing: 2px;">${generateOtp}</h1>
         <p>কোডটির মেয়াদ থাকবে ৫ মিনিট। কারো সাথে কোডটি শেয়ার করবেন না।</p>
       </div>
     `;
