@@ -42,7 +42,7 @@ exports.sendOtp = async (req, res) => {
 
     // make random otp 
 
-    const generateOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const generateOtp = Math.floor(10000 + Math.random() * 90000).toString();
    
 
     // finish old otp
@@ -68,7 +68,7 @@ exports.sendOtp = async (req, res) => {
 
 
 
-    sendSmtpEmail.sender = { "name": "Smart Ledger App", "email": process.env.SENDER_EMAIL };
+    sendSmtpEmail.sender = { "name": "Hisab Ai", "email": process.env.SENDER_EMAIL };
     sendSmtpEmail.to = [{ "email": email }]
 
 
