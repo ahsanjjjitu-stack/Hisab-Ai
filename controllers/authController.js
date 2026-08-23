@@ -42,7 +42,7 @@ exports.sendOtp = async (req, res) => {
 
     // make random otp 
 
-    const generateOtp = Math.floor(10000 + Math.random() * 90000).toString();
+    const generateOtp = Math.floor(1000 + Math.random() * 9000).toString();
    
 
     // finish old otp
