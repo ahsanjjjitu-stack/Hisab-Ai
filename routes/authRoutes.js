@@ -9,4 +9,7 @@ router.post("/send-otp", authController.sendOtp);
 // verify otp router
 router.post("/verify-otp", authController.verifyOtpAndRegister);
 
+
+
+
 module.exports = router;

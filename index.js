@@ -3,6 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
+const shopRoutes = require("./routes/shopRoutes");
 
 
 const dns = require('dns');
@@ -22,6 +23,7 @@ app.use(cors());
 
 
 app.use("/api/auth", authRoutes);
+app.use("/api/setup", shopRoutes);
    
 
 
