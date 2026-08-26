@@ -1,4 +1,5 @@
 const Session = require("../model/model.session");
+// const Transaction = require('../model/Transaction');
 
 
 // আজকের তারিখ ফরম্যাট করার ফাংশন (যেমন: "25 Aug 2026")
@@ -122,4 +123,80 @@ exports.getUserAllSession = async (req, res) => {
 
  }
  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// delete user session 
+
+exports.deleteSession = async (req, res) => {
+
+  try {
+
+    const { sessionId, userId } = req.params;
+
+    if (!sessionId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID এবং User ID উভয়ই দেওয়া আবশ্যক!'
+      });
+    }
+
+
+
+    // check session is current user
+    const deletedSession = await Session.findOneAndDelete({ _id: sessionId, userId: userId });
+
+
+
+    if (!deletedSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'সেশনটি পাওয়া যায়নি বা আপনার এই সেশনটি মোছার অনুমতি নেই!'
+      });
+    }
+
+
+
+    // current session all msg delete 
+    // await Transaction.deleteMany({ sessionId, userId });
+
+
+
+
+    return res.status(200).json({
+      success: true,
+      message: 'সেশন এবং এর সকল তথ্য সফলভাবে মুছে ফেলা হয়েছে!',
+    });
+
+
+
+
+  }
+  catch (error){
+    console.error('Delete Session Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'সেশন মুছতে সমস্যা হয়েছে!',
+      error: error.message
+    });
+
+  }
+
+
+
 }
