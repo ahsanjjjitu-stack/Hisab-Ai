@@ -5,6 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const shopRoutes = require("./routes/shopRoutes");
 const sessionRoutes = require("./routes/sessionRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 
 
 const dns = require('dns');
@@ -26,6 +27,7 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/setup", shopRoutes);
 app.use("/api/session", sessionRoutes);
+app.use("/api/message", messageRoutes);
    
 
 
