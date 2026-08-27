@@ -149,6 +149,13 @@ exports.sendMessage = async (req, res) => {
     }
     catch (error) {
 
+    console.error('Send Message Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'মেসেজ প্রসেস করতে সমস্যা হয়েছে!',
+      error: error.message
+    });
+
     }
 }
 
