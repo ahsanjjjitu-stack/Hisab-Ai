@@ -1,6 +1,7 @@
 require("dotenv").config();
 const { GoogleGenAI } = require('@google/genai');
 
+// SDK Initialization
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 exports.parseTransactionWithMessage = async (userMessage) => {
@@ -40,27 +41,30 @@ You MUST respond ONLY with a valid JSON object matching this structure:
 Rules:
 1. If payment is fully CASH: paymentMethod="CASH", paidAmount=totalAmount, dueAmount=0.
 2. If payment is fully DUE (বাকি): paymentMethod="DUE", paidAmount=0, dueAmount=totalAmount.
-3. If partial (যেমন: "২০০ টাকার কেনাকাটায় ১০০ টাকা দিছে বাকি ১০০ টাকা বাকী"): paymentMethod="PARTIAL_DUE", paidAmount=100, dueAmount=100.
-4. If old due is collected (পুরান বাকি আদায়): transactionType="DUE_COLLECTION".
+3. If partial: paymentMethod="PARTIAL_DUE", paidAmount=number, dueAmount=number.
+4. If old due is collected: transactionType="DUE_COLLECTION".
 5. Extract items into the items array properly.
 6. Keep names and text in readable Bengali script.
 `;
 
-        const model = ai.getGenerativeModel({
+        // Correct API Call method for @google/genai SDK
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            systemInstruction: systemPrompt,
-            generationConfig: {
+            contents: userMessage,
+            config: {
+                systemInstruction: systemPrompt,
                 responseMimeType: 'application/json'
             }
         });
 
-        const result = await model.generateContent(userMessage);
-        const responseText = result.response.text().trim();
+        // Get text directly from response
+        const responseText = response.text.trim();
 
         return JSON.parse(responseText);
 
     } catch (error) {
         console.error('Gemini AI Processing Error:', error);
-        throw new Error('AI মেসেজ প্রসেস করতে ব্যর্থ হয়েছে!');
+        // Original error pass করে দেওয়া হলো যেন পোস্টম্যানে আসল সমস্যা দেখা যায়
+        throw new Error(`AI Error: ${error.message}`);
     }
 };
