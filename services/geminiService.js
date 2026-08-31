@@ -1,7 +1,10 @@
-require("dotenv").config();
 const { GoogleGenAI } = require('@google/genai');
 
-// SDK Initialization
+// API Key সেট করা আছে কিনা চেক
+if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY is missing in environment variables!");
+}
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 exports.parseTransactionWithMessage = async (userMessage) => {
@@ -11,60 +14,46 @@ You are an expert AI accounting assistant for a Bangladeshi shopkeeper.
 Your job is to read the shopkeeper's message (written in Bengali, Banglish, or English) and extract transaction details.
 
 You MUST respond ONLY with a valid JSON object matching this structure:
-
 {
-  "aiReply": "A friendly, playful Bengali response addressing the shopkeeper as 'মামা'. E.g., 'মামা, হিসাব লিখে রাখলাম!', 'অ্যালার্ট! হিসাব এন্ট্রি ডান মামা।'",
-  "isTransaction": true/false (Set false if it is just normal greetings like 'কেমন আছো'),
+  "aiReply": "A friendly Bengali response addressing the shopkeeper as 'মামা'. E.g., 'মামা, হিসাব লিখে রাখলাম!'",
+  "isTransaction": true,
   "transactionData": {
-    "transactionType": "SALE" / "EXPENSE" / "DUE_COLLECTION",
+    "transactionType": "SALE",
     "items": [
       {
-        "itemName": "Item name in Bengali",
-        "quantity": number or 1,
-        "unit": "kg" / "gm" / "piece" / "ltr" or null,
-        "unitPrice": number or 0,
-        "totalPrice": number
+        "itemName": "চাল",
+        "quantity": 1,
+        "unit": "kg",
+        "unitPrice": 200,
+        "totalPrice": 200
       }
     ],
-    "totalAmount": number (Required, total cost/price),
-    "paidAmount": number (Amount paid right now),
-    "dueAmount": number (Remaining due amount),
-    "paymentMethod": "CASH" / "DUE" / "PARTIAL_DUE" / "DIGITAL",
+    "totalAmount": 200,
+    "paidAmount": 100,
+    "dueAmount": 100,
+    "paymentMethod": "PARTIAL_DUE",
     "customer": {
-      "name": "Customer name in Bengali or null",
-      "phone": "Phone number if provided or null",
-      "address": "Address if provided or null"
+      "name": "রহিম",
+      "phone": null,
+      "address": null
     }
   }
 }
-
-Rules:
-1. If payment is fully CASH: paymentMethod="CASH", paidAmount=totalAmount, dueAmount=0.
-2. If payment is fully DUE (বাকি): paymentMethod="DUE", paidAmount=0, dueAmount=totalAmount.
-3. If partial: paymentMethod="PARTIAL_DUE", paidAmount=number, dueAmount=number.
-4. If old due is collected: transactionType="DUE_COLLECTION".
-5. Extract items into the items array properly.
-6. Keep names and text in readable Bengali script.
 `;
 
-        // Correct API Call method for @google/genai SDK
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: userMessage,
+            contents: `${systemPrompt}\n\nShopkeeper Message: "${userMessage}"`,
             config: {
-                systemInstruction: systemPrompt,
                 responseMimeType: 'application/json'
             }
         });
 
-        // Get text directly from response
         const responseText = response.text.trim();
-
         return JSON.parse(responseText);
 
     } catch (error) {
-        console.error('Gemini AI Processing Error:', error);
-        // Original error pass করে দেওয়া হলো যেন পোস্টম্যানে আসল সমস্যা দেখা যায়
-        throw new Error(`AI Error: ${error.message}`);
+        console.error('Gemini AI Processing Error Detail:', error);
+        throw error; // সঠিক error log দেখার জন্য
     }
 };
