@@ -134,13 +134,16 @@ exports.sendMessage = async (req, res) => {
 
     }
     catch (error) {
-    console.error('Send Message Error:', error);
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: 'মেসেজ প্রসেস করতে সমস্যা হয়েছে!',
-      error: error.message
-    });
+    // শুধু error.message না দিয়ে পুরো error ও stack প্রিন্ট কর
+        console.log("❌ EXACT ERROR OBJECT:", error);
+        console.log("📍 ERROR STACK:", error.stack);
+
+        return res.status(500).json({
+            success: false,
+            message: 'মেসেজ প্রসেস করতে সমস্যা হয়েছে!',
+            error: error.message,
+            fullError: error // টেস্ট করার জন্য রেসপন্সেও পাঠায় দে
+        });
 
     }
 }
