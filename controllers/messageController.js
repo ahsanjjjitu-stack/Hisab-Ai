@@ -134,7 +134,6 @@ exports.sendMessage = async (req, res) => {
 
     }
     catch (error) {
-
     console.error('Send Message Error:', error);
     console.log(error);
     return res.status(500).json({
