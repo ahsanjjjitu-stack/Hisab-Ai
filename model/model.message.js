@@ -22,6 +22,10 @@ const messageSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    summary: {
+         type: String,
+          default: null 
+        },
     transactionId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Transaction',

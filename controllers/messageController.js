@@ -109,6 +109,7 @@ exports.sendMessage = async (req, res) => {
             sessionId,
             sender: "AI",
             text: aiParsedResult.aiReply || 'মামা, হিসাবটা সেভ করে রেখেছি!',
+            summary: aiParsedResult.summary || null,
             transactionId: savedTransaction ? savedTransaction._id : null
         });
 
