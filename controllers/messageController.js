@@ -28,11 +28,11 @@ exports.sendMessage = async (req, res) => {
 
        // save shop massage 
        const userMessage = await Message.create({
-           userId,
-           sessionId,
-           sender: "USER",
-           text: userMessageText
-       });
+            userId,
+            sessionId,
+            sender: "USER",
+            text: userMessageText
+        });
        
 
 
@@ -57,25 +57,21 @@ exports.sendMessage = async (req, res) => {
         const tData = aiParsedResult.transactionData;
 
 
-
            savedTransaction = await Transaction.create({
                userId,
-               sessionId,
-               rawMessage: userMessageText,
-               transactionType: tData.transactionType || 'SALE',
-               itemName: tData.itemName || null,
-               quantity: tData.quantity || 0,
-               unit: tData.unit || null,
-               totalAmount: tData.totalAmount || 0,
-               paymentMethod: tData.paymentMethod || 'CASH',
-               paidAmount: tData.paidAmount || 0,
-               dueAmount: tData.dueAmount || 0,
-               customerName: tData.customerName || null,
-               customerPhone: tData.customerPhone || null,
-               summaryText: tData.summaryText || 'হিসাব সংরক্ষণ করা হয়েছে'
+                sessionId,
+                transactionType: tData.transactionType || 'SALE',
+                items: tData.items || [],
+                totalAmount: tData.totalAmount || 0,
+                paidAmount: tData.paidAmount || 0,
+                dueAmount: tData.dueAmount || 0,
+                paymentMethod: tData.paymentMethod || 'CASH',
+                customer: {
+                    name: tData.customer?.name || null,
+                    phone: tData.customer?.phone || null,
+                    address: tData.customer?.address || null
+                }
            });
-
-
 
 
 
@@ -85,25 +81,19 @@ exports.sendMessage = async (req, res) => {
             // session total hisab 
 
         const session = await Session.findById(sessionId);
+            if (session) {
+                if (tData.transactionType === 'SALE') {
+                    session.totalSales = (session.totalSales || 0) + (tData.totalAmount || 0);
+                } else if (tData.transactionType === 'EXPENSE') {
+                    session.totalExpenses = (session.totalExpenses || 0) + (tData.totalAmount || 0);
+                }
 
+                if (tData.dueAmount > 0) {
+                    session.totalDue = (session.totalDue || 0) + tData.dueAmount;
+                }
 
-        if (session) {
-
-            if (tData.transactionType === 'SALE'){
-                session.totalSales = (session.totalSales || 0) + (tData.totalAmount || 0);
+                await session.save();
             }
-            else if (tData.transactionType === 'EXPENSE') {
-                session.totalExpenses = (session.totalExpenses || 0) + (tData.totalAmount || 0);
-            }
-
-            if (tData.dueAmount > 0){
-                session.totalDue = (session.totalDue || 0) + tData.dueAmount;
-            }
-
-
-            await session.save();
-            
-        }
 
 
     }
@@ -125,11 +115,7 @@ exports.sendMessage = async (req, res) => {
 
 
 
-
-
-
-        // ai massage population 
-        const populatedAiMessage = await Message.findById(aiMessage._id).populate('transactionId');
+        
 
 
 
@@ -139,7 +125,7 @@ exports.sendMessage = async (req, res) => {
             message: 'মেসেজ প্রসেস সফল হয়েছে!',
             data: {
                 userMessage,
-                aiMessage: populatedAiMessage
+                aiMessage
             }
         });
 
@@ -173,34 +159,79 @@ exports.sendMessage = async (req, res) => {
 
 
 // get message and session item 
-// get message and session item 
+
 exports.getMessageAndSessionItem = async (req, res) => {
     try {
-        const { sessionId } = req.params;
-        const userId = req.user ? req.user.id : req.params.userId; 
+       
+        const { userId, sessionId } = req.params;
 
-        if (!userId || !sessionId) {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+
+        const skip = (page - 1) * limit;
+
+
+
+
+        if (!sessionId || !userId) {
             return res.status(400).json({
                 success: false,
-                message: 'userId এবং sessionId প্রদান করা আবশ্যক!'
+                message: 'sessionId এবং userId উভয়ই প্রদান করা আবশ্যক!'
             });
         }
 
+
+
+
+
+        // total message count 
+
+        const totalMessages = await Message.countDocuments({ userId, sessionId });
+
+
+
+
+
+        // message fetch and pagination
         const messages = await Message.find({ userId, sessionId })
-            .populate('transactionId')
-            .sort({ createdAt: 1 }); 
+        .populate('transactionId')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+
+
+
+
+        // reverse message 
+        const reversedMessages = messages.reverse();
+        const totalPages = Math.ceil(totalMessages / limit);
+
+
+
+
 
         return res.status(200).json({
             success: true,
-            count: messages.length,
-            messages
+            isLoading: false,
+            currentPage: page,
+            totalPages,
+            totalMessages,
+            hasMore: page < totalPages,
+            messages: reversedMessages
         });
 
+
+
+
+
     } catch (error) {
-        console.error("Get Messages Error:", error);
+       console.error("Get Messages Error:", error);
         return res.status(500).json({
             success: false,
-            message: 'সার্ভারে অভ্যন্তরীণ সমস্যা হয়েছে!'
+            isLoading: false,
+            message: 'সার্ভারে অভ্যন্তরীণ সমস্যা হয়েছে!',
+            error: error.message
         });
     }
 };
