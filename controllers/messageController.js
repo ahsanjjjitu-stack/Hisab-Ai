@@ -1,8 +1,9 @@
-require("../utils/dateHelper");
 const Message = require("../model/model.message");
 const Transaction = require("../model/model.transaction");
 const Session = require("../model/model.session");
 const { parseTransactionWithMessage, generateSummaryReply } = require("../services/geminiService");
+const { getTodayRangeBD } = require("../utils/dateHelper");
+
 
 
 
@@ -225,7 +226,7 @@ exports.sendMessage = async (req, res) => {
     finalAiText = await generateSummaryReply(userMessageText, dataForAI, chatHistory);
     finalSummary = null;
 
-    
+
 }
 
 
