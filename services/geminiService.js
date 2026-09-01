@@ -3,7 +3,7 @@ const { GoogleGenAI } = require('@google/genai');
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-exports.parseUserIntentAndMessage = async (userMessage, chatHistory = []) => {
+exports.parseTransactionWithMessage = async (userMessage, chatHistory = []) => {
     try {
         const systemPrompt = `
 You are an expert AI accounting assistant for a Bangladeshi shopkeeper.
