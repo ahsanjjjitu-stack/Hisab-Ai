@@ -111,44 +111,52 @@ exports.sendMessage = async (req, res) => {
             }
 
         }
-        
-        else if (intent === 'QUERY_SUMMARY') {
-    const dbQuery = { userId };
 
-    // ১. কাস্টমার নাম ফিল্টার (যদি নির্দিষ্ট কারো নাম বলে)
-    if (queryFilter?.customerName) {
+        
+        
+       else if (intent === 'QUERY_SUMMARY') {
+    // ১. বাংলাদেশ টাইম (BST: UTC+6) অনুযায়ী আজকের দিনের শুরু ও শেষ বের করা
+    const now = new Date();
+    
+    // আজকের দিন শুরু (Bangladesh Time 00:00:00 -> UTC 18:00:00 of previous day)
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // আজকের দিন শেষ (Bangladesh Time 23:59:59 -> UTC 17:59:59 of current day)
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    // ২. আজকের দিনের সব ডাটা ফেচ করার কোয়েরি
+    const dbQuery = {
+        userId,
+        sessionId,
+        createdAt: { $gte: startOfToday, $lte: endOfToday }
+    };
+
+    // কাস্টমারের নির্দিষ্ট নাম থাকলে ফিল্টার যোগ করা
+    if (queryFilter && queryFilter.customerName) {
         dbQuery['customer.name'] = new RegExp(queryFilter.customerName, 'i');
     }
 
-    // ২. আজকের তারিখের সঠিক UTC Range (বাংলাদেশ টাইমের সাথে মিল রেখে)
-    if (queryFilter?.dateRange === 'TODAY') {
-        const start = new Date();
-        start.setUTCHours(0, 0, 0, 0); // আজকের দিনের শুরু (UTC)
+    // আজকের সব লেনদেন নিয়ে আসা (কোনো Limit ছাড়া)
+    const rawTransactions = await Transaction.find(dbQuery).sort({ createdAt: 1 }).lean();
 
-        const end = new Date();
-        end.setUTCHours(23, 59, 59, 999); // আজকের দিনের শেষ (UTC)
+    // ৩. ডাটা ক্লিনআপ (Token Optimization): Gemini-র জন্য শুধু প্রয়োজনীয় হিসাবের তথ্য রাখা
+    const cleanedTransactions = rawTransactions.map(t => ({
+        type: t.transactionType,
+        items: t.items.map(i => `${i.itemName || ''} (${i.quantity || 1} ${i.unit || ''}) - ${i.totalPrice || 0}tk`),
+        totalAmount: t.totalAmount,
+        paidAmount: t.paidAmount,
+        dueAmount: t.dueAmount,
+        paymentMethod: t.paymentMethod,
+        customerName: t.customer?.name || 'Unknown',
+        customerPhone: t.customer?.phone || 'N/A',
+        customerAddress: t.customer?.address || 'N/A',
+        time: new Date(t.createdAt).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka' })
+    }));
 
-        dbQuery.createdAt = { $gte: start, $lte: end };
-    }
-
-    // ৩. বাকির ক্ষেত্রে সেফ কোয়েরি (dueAmount > 0 অথবা transactionType চেক)
-    if (queryFilter?.transactionType === 'DUE') {
-        dbQuery.dueAmount = { $gt: 0 };
-    }
-
-    // MongoDB থেকে ডাটা ফেচ
-    let fetchedTransactions = await Transaction.find(dbQuery).lean();
-
-    // সেফটি ফলব্যাক: যদি তারিখের ফিল্টারে ভুল করে ডাটা খালি আসে, তবে সেশনের সবশেষ ১০টি লেনদেন নিয়ে Gemini-কে দেওয়া
-    if (!fetchedTransactions || fetchedTransactions.length === 0) {
-        fetchedTransactions = await Transaction.find({ userId })
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean();
-    }
-
-    // Gemini-কে দিয়ে উত্তর তৈরি
-    finalAiText = await generateSummaryReply(userMessageText, fetchedTransactions, chatHistory);
+    // ৪. হালকা ও পরিষ্কার ডাটা Gemini-র কাছে পাঠানো
+    finalAiText = await generateSummaryReply(userMessageText, cleanedTransactions, chatHistory);
     finalSummary = null;
 }
 
