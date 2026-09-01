@@ -1,13 +1,14 @@
-const { fromZonedTime } = require('date-fns-tz');
-
 
 function getTodayRangeBD() {
     const now = new Date();
 
-    const bdDateString = now.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
+    // BD সময় অনুযায়ী আজকের তারিখ বের করা (YYYY-MM-DD ফরম্যাটে)
+    const bdDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
 
-    const startOfToday = fromZonedTime(`${bdDateString}T00:00:00.000`, 'Asia/Dhaka');
-    const endOfToday = fromZonedTime(`${bdDateString}T23:59:59.999`, 'Asia/Dhaka');
+    // Bangladesh সবসময় UTC+6 (কোনো Daylight Saving নাই), 
+    // তাই সরাসরি offset সহ ISO string বানালেই সঠিক UTC instant পাওয়া যাবে
+    const startOfToday = new Date(`${bdDateString}T00:00:00.000+06:00`);
+    const endOfToday = new Date(`${bdDateString}T23:59:59.999+06:00`);
 
     return { startOfToday, endOfToday };
 }
