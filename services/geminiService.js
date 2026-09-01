@@ -1,23 +1,31 @@
 require("dotenv").config();
 const { GoogleGenAI } = require('@google/genai');
 
-// Google Gen AI SDK Initialization
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-exports.parseTransactionWithMessage = async (userMessage) => {
+exports.parseUserIntentAndMessage = async (userMessage, chatHistory = []) => {
     try {
         const systemPrompt = `
 You are an expert AI accounting assistant for a Bangladeshi shopkeeper.
-Your job is to read the shopkeeper's message (written in Bengali, Banglish, or English) and extract transaction details.
+Your job is to read the shopkeeper's latest message alongside recent chat history and return a valid JSON object.
 
-You MUST respond ONLY with a valid JSON object matching this structure:
+Identify the INTENT of the message:
+1. "SAVE_TRANSACTION": If the user is entering a new sale, expense, or due entry (e.g., "চাল ২ কেজি ১২০ টাকা").
+2. "QUERY_SUMMARY": If the user is asking to view/know past transactions, totals, or customer dues (e.g., "আজকে মোট বাকি কত?", "রহিমের হিসেব দেখাও").
+3. "NORMAL_CHAT": If the user is having normal conversion, greetings, or complimenting previous work (e.g., "কেমন আছো", "আগের হিসাব সুন্দর লিখেছিস").
 
+JSON Output Structure:
 {
-  "aiReply": "A friendly, playful Bengali response addressing the shopkeeper as 'মামা'. Inform the entry (or reply to chat) AND always end with a varied, dynamic follow-up question (e.g. 'পরের হিসাবটা বলেন মামা!', 'আর কোনো লেনদেন আছে নাকি?', 'এখন কী হিসাব তুলবো বলুন!'). Do NOT use the exact same closing phrase every time.",
-  "isTransaction": true/false (Set false if it is just normal chat like 'কেমন আছো'),
-  "summary": "Short clean Bengali summary ONLY if isTransaction is true (e.g., '৭ কেজি পেঁয়াজ - ৬৯০ টাকা (নগদ)'). If isTransaction is false, set this strictly to null.",
+  "intent": "SAVE_TRANSACTION" | "QUERY_SUMMARY" | "NORMAL_CHAT",
+  "aiReply": "A warm Bengali response starting with 'মামা'. ONLY provide this if intent is 'SAVE_TRANSACTION' or 'NORMAL_CHAT'. If intent is 'QUERY_SUMMARY', set this to null (the backend will fetch data and ask you again). Always end with a natural, dynamic follow-up question.",
+  "summary": "Short clean Bengali summary if intent is SAVE_TRANSACTION (e.g., '২ কেজি চাল - ১২০ টাকা (নগদ)'). Otherwise set to null.",
+  "queryFilter": {
+    "dateRange": "TODAY" | "THIS_MONTH" | "ALL_TIME" | null,
+    "transactionType": "SALE" | "EXPENSE" | "DUE" | "ALL" | null,
+    "customerName": "Customer name in Bengali if specified or null"
+  },
   "transactionData": {
-    "transactionType": "SALE" / "EXPENSE" / "DUE_COLLECTION",
+    "transactionType": "SALE" | "EXPENSE" | "DUE_COLLECTION",
     "items": [
       {
         "itemName": "Item name in Bengali",
@@ -27,46 +35,114 @@ You MUST respond ONLY with a valid JSON object matching this structure:
         "totalPrice": number
       }
     ],
-    "totalAmount": number (Required, total cost/price),
-    "paidAmount": number (Amount paid right now),
-    "dueAmount": number (Remaining due amount),
-    "paymentMethod": "CASH" / "DUE" / "PARTIAL_DUE" / "DIGITAL",
+    "totalAmount": number,
+    "paidAmount": number,
+    "dueAmount": number,
+    "paymentMethod": "CASH" | "DUE" | "PARTIAL_DUE" | "DIGITAL",
     "customer": {
       "name": "Customer name in Bengali or null",
-      "phone": "Phone number if provided or null",
-      "address": "Address if provided or null"
+      "phone": "Phone number or null",
+      "address": "Address or null"
     }
   }
 }
 
 Rules:
-1. If payment is fully CASH: paymentMethod="CASH", paidAmount=totalAmount, dueAmount=0.
-2. If payment is fully DUE (বাকি): paymentMethod="DUE", paidAmount=0, dueAmount=totalAmount.
-3. If partial (যেমন: "২০০ টাকার মাপ্তে ১০০ দিছে বাকি ১০০"): paymentMethod="PARTIAL_DUE", paidAmount=100, dueAmount=100.
-4. If old due is collected (পুরান বাকি আদায়): transactionType="DUE_COLLECTION".
-5. Extract items into the items array properly.
-6. Keep names and text in readable Bengali script.
-7. CRITICAL: If isTransaction is false, set transactionData to null and summary to null.
-8. NEVER repeat the same ending phrase in aiReply. Always vary the follow-up question naturally.
+- If intent is "NORMAL_CHAT", set queryFilter to null and transactionData to null.
+- If intent is "QUERY_SUMMARY", extract filter params into queryFilter, set transactionData to null.
+- Never use markdown formatting like \`\`\`json. Return pure JSON only.
 `;
 
-        // Correct API Call method for new @google/genai SDK
+        // ইতিহাস ফরম্যাট করা (Recent History Context)
+        const formattedHistory = chatHistory.map(msg => `${msg.sender}: ${msg.text}`).join("\n");
+
+        const promptText = `
+Recent Conversation History:
+${formattedHistory || "No previous history"}
+
+Current Shopkeeper Message: "${userMessage}"
+`;
+
         const response = await ai.models.generateContent({
-            model: 'gemini-3.6-flash',
-            contents: userMessage,
+            model: 'gemini-2.5-flash',
+            contents: `${systemPrompt}\n\n${promptText}`,
             config: {
-                systemInstruction: systemPrompt,
                 responseMimeType: 'application/json'
             }
         });
 
-        // Get text response
-        const responseText = response.text.trim();
-
-        return JSON.parse(responseText);
+        return JSON.parse(response.text.trim());
 
     } catch (error) {
-        console.error('Gemini AI Processing Exact Error:', error);
-        throw new Error(`AI Processing Error: ${error.message}`);
+        console.error('Gemini Parsing Error:', error);
+        throw new Error('AI মেসেজ প্রসেস করতে ব্যর্থ হয়েছে!');
     }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exports.generateSummaryReply = async (userMessage, dbResults, chatHistory = []) => {
+
+  try {
+
+    const systemPrompt = `
+You are an expert AI accounting assistant for a Bangladeshi shopkeeper.
+The shopkeeper asked a question about their transaction history.
+Backend has fetched the relevant data from the MongoDB database.
+
+Your Job:
+Read the fetched database data and answer the shopkeeper's question accurately in warm, natural Bengali.
+Always address them as 'মামা' and end with a natural, dynamic follow-up question.
+
+Rules:
+- Be precise with amounts and quantities based ONLY on the provided database data.
+- If database data is empty or zero, politely inform the shopkeeper that no such transactions were found.
+- Do NOT output JSON here. Just return pure text.
+`;
+
+
+const promptText = `
+Database Query Results:
+${JSON.stringify(dbResults, null, 2)}
+User Question: "${userMessage}"
+`;
+
+
+
+
+const response = await ai.models.generateContent({
+     model: 'gemini-2.5-flash',
+     contents: `${systemPrompt}\n\n${promptText}`
+});
+
+
+
+
+return response.text.trim();
+
+
+
+  }
+  catch (error) {
+      console.error('Summary Reply Generation Error:', error);
+      return "মামা, ডাটাবেজ থেকে হিসাবটা সাজিয়ে বলতে একটু সমস্যা হচ্ছে। আবার একটু বলবেন?";
+  }
+
+
+
+}
