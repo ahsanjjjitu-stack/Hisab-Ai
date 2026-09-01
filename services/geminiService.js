@@ -3,65 +3,45 @@ const { GoogleGenAI } = require('@google/genai');
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-exports.parseTransactionWithMessage = async (userMessage, chatHistory = []) => {
+exports.parseUserIntentAndMessage = async (userMessage, chatHistory = []) => {
     try {
         const systemPrompt = `
 You are an expert AI accounting assistant for a Bangladeshi shopkeeper.
-Your job is to read the shopkeeper's latest message alongside recent chat history and return a valid JSON object.
+Analyze the user's input (written in Bengali, Banglish, or English) and classify the intent correctly.
 
-Identify the INTENT of the message:
-1. "SAVE_TRANSACTION": If the user is entering a new sale, expense, or due entry (e.g., "চাল ২ কেজি ১২০ টাকা").
-2. "QUERY_SUMMARY": If the user is asking to view/know past transactions, totals, or customer dues (e.g., "আজকে মোট বাকি কত?", "রহিমের হিসেব দেখাও").
-3. "NORMAL_CHAT": If the user is having normal conversion, greetings, or complimenting previous work (e.g., "কেমন আছো", "আগের হিসাব সুন্দর লিখেছিস").
+CRITICAL INTENT RULES:
+1. "QUERY_SUMMARY": If the user is asking to view/know/see past records, today's totals, remaining dues, or customer info/addresses. (e.g., "আজকের বাকি কত", "কে কে বাকি নিছে", "কার কার ঠিকানা কি", "হিসাব দেখা", "hisab ta de", "total baki", "k k baki nise").
+2. "SAVE_TRANSACTION": ONLY if the user is explicitly recording a NEW transaction with items/amounts (e.g., "চাল ২ কেজি ১২০ টাকা", "রহিমকে ১০০ টাকা বাকি দিলাম").
+3. "NORMAL_CHAT": Casual greetings, thanks, or general feedback.
 
-JSON Output Structure:
+JSON Structure:
 {
   "intent": "SAVE_TRANSACTION" | "QUERY_SUMMARY" | "NORMAL_CHAT",
-  "aiReply": "A warm Bengali response starting with 'মামা'. ONLY provide this if intent is 'SAVE_TRANSACTION' or 'NORMAL_CHAT'. If intent is 'QUERY_SUMMARY', set this to null (the backend will fetch data and ask you again). Always end with a natural, dynamic follow-up question.",
-  "summary": "Short clean Bengali summary if intent is SAVE_TRANSACTION (e.g., '২ কেজি চাল - ১২০ টাকা (নগদ)'). Otherwise set to null.",
+  "aiReply": "A warm Bengali message starting with 'মামা'. Provide this ONLY for SAVE_TRANSACTION or NORMAL_CHAT. For QUERY_SUMMARY, set this strictly to null.",
+  "summary": "Short clean Bengali summary if SAVE_TRANSACTION. Otherwise null.",
   "queryFilter": {
     "dateRange": "TODAY" | "THIS_MONTH" | "ALL_TIME" | null,
     "transactionType": "SALE" | "EXPENSE" | "DUE" | "ALL" | null,
-    "customerName": "Customer name in Bengali if specified or null"
+    "customerName": "Customer name in Bengali or null"
   },
   "transactionData": {
     "transactionType": "SALE" | "EXPENSE" | "DUE_COLLECTION",
-    "items": [
-      {
-        "itemName": "Item name in Bengali",
-        "quantity": number or 1,
-        "unit": "kg" / "gm" / "piece" / "ltr" or null,
-        "unitPrice": number or 0,
-        "totalPrice": number
-      }
-    ],
-    "totalAmount": number,
-    "paidAmount": number,
-    "dueAmount": number,
-    "paymentMethod": "CASH" | "DUE" | "PARTIAL_DUE" | "DIGITAL",
-    "customer": {
-      "name": "Customer name in Bengali or null",
-      "phone": "Phone number or null",
-      "address": "Address or null"
-    }
+    "items": [],
+    "totalAmount": 0,
+    "paidAmount": 0,
+    "dueAmount": 0,
+    "paymentMethod": "CASH",
+    "customer": { "name": null, "phone": null, "address": null }
   }
 }
 
 Rules:
-- If intent is "NORMAL_CHAT", set queryFilter to null and transactionData to null.
-- If intent is "QUERY_SUMMARY", extract filter params into queryFilter, set transactionData to null.
-- Never use markdown formatting like \`\`\`json. Return pure JSON only.
+- If intent is QUERY_SUMMARY: transactionData MUST be null. Extract queryFilter (e.g., for "ajker total baki", dateRange="TODAY", transactionType="DUE").
+- Never mistake a question or a request to view data as a new transaction entry.
 `;
 
-        // ইতিহাস ফরম্যাট করা (Recent History Context)
         const formattedHistory = chatHistory.map(msg => `${msg.sender}: ${msg.text}`).join("\n");
-
-        const promptText = `
-Recent Conversation History:
-${formattedHistory || "No previous history"}
-
-Current Shopkeeper Message: "${userMessage}"
-`;
+        const promptText = `Recent History:\n${formattedHistory || "None"}\n\nCurrent Message: "${userMessage}"`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
