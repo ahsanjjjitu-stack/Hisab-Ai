@@ -1,3 +1,4 @@
+require("../utils/dateHelper");
 const Message = require("../model/model.message");
 const Transaction = require("../model/model.transaction");
 const Session = require("../model/model.session");
@@ -112,36 +113,95 @@ exports.sendMessage = async (req, res) => {
 
         }
 
-        
+
         
        else if (intent === 'QUERY_SUMMARY') {
     // ১. বাংলাদেশ টাইম (BST: UTC+6) অনুযায়ী আজকের দিনের শুরু ও শেষ বের করা
-    const now = new Date();
-    
-    // আজকের দিন শুরু (Bangladesh Time 00:00:00 -> UTC 18:00:00 of previous day)
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
+    const { startOfToday, endOfToday } = getTodayRangeBD();
 
-    // আজকের দিন শেষ (Bangladesh Time 23:59:59 -> UTC 17:59:59 of current day)
-    const endOfToday = new Date(now);
-    endOfToday.setHours(23, 59, 59, 999);
+
+
+      let dateFilter = {};
+    if (!queryFilter?.dateRange || queryFilter.dateRange === 'TODAY') {
+        dateFilter = { createdAt: { $gte: startOfToday, $lte: endOfToday } };
+    }
+
+
+
+
 
     // ২. আজকের দিনের সব ডাটা ফেচ করার কোয়েরি
-    const dbQuery = {
+      const dbQuery = {
         userId,
         sessionId,
-        createdAt: { $gte: startOfToday, $lte: endOfToday }
+        ...dateFilter
     };
 
+
+
+
+
+
+
+      if (queryFilter?.transactionType === 'DUE') {
+        // "বাকি" মানে dueAmount > 0 থাকা transaction
+        dbQuery['dueAmount'] = { $gt: 0 };
+    } else if (queryFilter?.transactionType === 'SALE') {
+        dbQuery['transactionType'] = 'SALE';
+    } else if (queryFilter?.transactionType === 'EXPENSE') {
+        dbQuery['transactionType'] = 'EXPENSE';
+    }
+
+
+
+
+
+
+
     // কাস্টমারের নির্দিষ্ট নাম থাকলে ফিল্টার যোগ করা
-    if (queryFilter && queryFilter.customerName) {
+   if (queryFilter?.customerName) {
         dbQuery['customer.name'] = new RegExp(queryFilter.customerName, 'i');
     }
 
-    // আজকের সব লেনদেন নিয়ে আসা (কোনো Limit ছাড়া)
+
+
+
+
+
+
+
+        const aggResult = await Transaction.aggregate([
+        { $match: dbQuery },
+        {
+            $group: {
+                _id: null,
+                totalSalesAmount: { $sum: "$totalAmount" },
+                totalPaidAmount: { $sum: "$paidAmount" },
+                totalDueAmount: { $sum: "$dueAmount" },
+                transactionCount: { $sum: 1 }
+            }
+        }
+    ]);
+
+
+
+
+
+   const totals = aggResult[0] || {
+        totalSalesAmount: 0,
+        totalPaidAmount: 0,
+        totalDueAmount: 0,
+        transactionCount: 0
+    };
+
+
+
+
+
+
+     // ৬. লিস্ট আকারে raw ডাটা ফেচ করা (যেমন "কে কে বাকি নিয়েছে" এর জন্য নাম-ভিত্তিক লিস্ট লাগবে)
     const rawTransactions = await Transaction.find(dbQuery).sort({ createdAt: 1 }).lean();
 
-    // ৩. ডাটা ক্লিনআপ (Token Optimization): Gemini-র জন্য শুধু প্রয়োজনীয় হিসাবের তথ্য রাখা
     const cleanedTransactions = rawTransactions.map(t => ({
         type: t.transactionType,
         items: t.items.map(i => `${i.itemName || ''} (${i.quantity || 1} ${i.unit || ''}) - ${i.totalPrice || 0}tk`),
@@ -155,9 +215,17 @@ exports.sendMessage = async (req, res) => {
         time: new Date(t.createdAt).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka' })
     }));
 
-    // ৪. হালকা ও পরিষ্কার ডাটা Gemini-র কাছে পাঠানো
-    finalAiText = await generateSummaryReply(userMessageText, cleanedTransactions, chatHistory);
+    // ৭. Gemini কে পাঠানোর জন্য — এখন pre-calculated totals + list দুটোই দিচ্ছি
+    //    যাতে Gemini হিসাব না করে শুধু সাজিয়ে বলে
+    const dataForAI = {
+        preCalculatedTotals: totals,   // এটাই ground truth, Gemini এর ওপর ভরসা না করে DB থেকেই সঠিক সংখ্যা
+        transactionsList: cleanedTransactions
+    };
+
+    finalAiText = await generateSummaryReply(userMessageText, dataForAI, chatHistory);
     finalSummary = null;
+
+    
 }
 
 
