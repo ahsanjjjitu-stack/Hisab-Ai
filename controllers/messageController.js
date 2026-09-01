@@ -110,39 +110,47 @@ exports.sendMessage = async (req, res) => {
                 await session.save();
             }
 
-        } else if (intent === 'QUERY_SUMMARY') {
-            // --- খ. ডাটাবেজ থেকে হিসাব কোয়েরি করা ---
-            const dbQuery = { userId };
-
-            // কাস্টমার নাম ফিল্টার
-            if (queryFilter?.customerName) {
-                dbQuery['customer.name'] = new RegExp(queryFilter.customerName, 'i');
-            }
-
-            // তারিখ ফিল্টার (যেমন: আজকের হিসাব)
-            if (queryFilter?.dateRange === 'TODAY') {
-                const startOfDay = new Date();
-                startOfDay.setHours(0, 0, 0, 0);
-                dbQuery.createdAt = { $gte: startOfDay };
-            }
-
-            // লেনদেনের ধরন ফিল্টার
-            if (queryFilter?.transactionType && queryFilter.transactionType !== 'ALL') {
-                if (queryFilter.transactionType === 'DUE') {
-                    dbQuery.dueAmount = { $gt: 0 };
-                } else {
-                    dbQuery.transactionType = queryFilter.transactionType;
-                }
-            }
-
-            // MongoDB থেকে ডাটা তুলে আনা
-            const fetchedTransactions = await Transaction.find(dbQuery).lean();
-
-            // Gemini-কে দিয়ে ডাটাবেজ রেজাল্ট সুন্দর বাংলায় প্রসেস করানো
-            finalAiText = await generateSummaryReply(userMessageText, fetchedTransactions, chatHistory);
-            finalSummary = null; // Query মেসেজে আলাদা করে summary চিপের দরকার নেই
         }
+        
+        else if (intent === 'QUERY_SUMMARY') {
+    const dbQuery = { userId };
 
+    // ১. কাস্টমার নাম ফিল্টার (যদি নির্দিষ্ট কারো নাম বলে)
+    if (queryFilter?.customerName) {
+        dbQuery['customer.name'] = new RegExp(queryFilter.customerName, 'i');
+    }
+
+    // ২. আজকের তারিখের সঠিক UTC Range (বাংলাদেশ টাইমের সাথে মিল রেখে)
+    if (queryFilter?.dateRange === 'TODAY') {
+        const start = new Date();
+        start.setUTCHours(0, 0, 0, 0); // আজকের দিনের শুরু (UTC)
+
+        const end = new Date();
+        end.setUTCHours(23, 59, 59, 999); // আজকের দিনের শেষ (UTC)
+
+        dbQuery.createdAt = { $gte: start, $lte: end };
+    }
+
+    // ৩. বাকির ক্ষেত্রে সেফ কোয়েরি (dueAmount > 0 অথবা transactionType চেক)
+    if (queryFilter?.transactionType === 'DUE') {
+        dbQuery.dueAmount = { $gt: 0 };
+    }
+
+    // MongoDB থেকে ডাটা ফেচ
+    let fetchedTransactions = await Transaction.find(dbQuery).lean();
+
+    // সেফটি ফলব্যাক: যদি তারিখের ফিল্টারে ভুল করে ডাটা খালি আসে, তবে সেশনের সবশেষ ১০টি লেনদেন নিয়ে Gemini-কে দেওয়া
+    if (!fetchedTransactions || fetchedTransactions.length === 0) {
+        fetchedTransactions = await Transaction.find({ userId })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean();
+    }
+
+    // Gemini-কে দিয়ে উত্তর তৈরি
+    finalAiText = await generateSummaryReply(userMessageText, fetchedTransactions, chatHistory);
+    finalSummary = null;
+}
 
 
 
